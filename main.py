@@ -18,7 +18,9 @@ from app.env import (
     OPENAI_FUNCTION_CALL_MODULE_NAME,
 )
 from app.slack_ops import build_home_tab
+from dotenv import load_dotenv
 
+load_dotenv()
 
 if __name__ == "__main__":
     from slack_bolt.adapter.socket_mode import SocketModeHandler
