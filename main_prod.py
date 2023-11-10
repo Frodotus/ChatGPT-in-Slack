@@ -11,30 +11,20 @@ except ImportError:
 import json
 import logging
 import os
-import openai
 
-from slack_sdk.web import WebClient
+import boto3
+import openai
+from slack_bolt import Ack, App, BoltContext
+from slack_bolt.adapter.aws_lambda import SlackRequestHandler
+from slack_bolt.adapter.aws_lambda.lambda_s3_oauth_flow import LambdaS3OAuthFlow
 from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
-from slack_bolt import App, Ack, BoltContext
+from slack_sdk.web import WebClient
 
-from app.bolt_listeners import register_listeners, before_authorize
-from app.env import (
-    USE_SLACK_LANGUAGE,
-    SLACK_APP_LOG_LEVEL,
-    OPENAI_MODEL,
-    OPENAI_TEMPERATURE,
-    OPENAI_API_TYPE,
-    OPENAI_API_BASE,
-    OPENAI_API_VERSION,
-    OPENAI_DEPLOYMENT_ID,
-    OPENAI_FUNCTION_CALL_MODULE_NAME,
-)
-from app.slack_ops import (
-    build_home_tab,
-    DEFAULT_HOME_TAB_MESSAGE,
-)
+from app.bolt_listeners import before_authorize, register_listeners
+from app.config import Config
 from app.i18n import translate
+from app.slack_ops import DEFAULT_HOME_TAB_MESSAGE, build_home_tab
 
 #
 # Product deployment (AWS Lambda)
@@ -51,12 +41,9 @@ from app.i18n import translate
 # serverless deploy
 #
 
-import boto3
-from slack_bolt.adapter.aws_lambda import SlackRequestHandler
-from slack_bolt.adapter.aws_lambda.lambda_s3_oauth_flow import LambdaS3OAuthFlow
 
 SlackRequestHandler.clear_all_log_handlers()
-logging.basicConfig(format="%(asctime)s %(message)s", level=SLACK_APP_LOG_LEVEL)
+logging.basicConfig(format="%(asctime)s %(message)s", level=Config.SLACK_APP_LOG_LEVEL)
 
 s3_client = boto3.client("s3")
 openai_bucket_name = os.environ["OPENAI_S3_BUCKET_NAME"]
@@ -122,7 +109,7 @@ def handler(event, context_):
     register_listeners(app)
     register_revocation_handlers(app)
 
-    if USE_SLACK_LANGUAGE is True:
+    if Config.USE_SLACK_LANGUAGE is True:
 
         @app.middleware
         def set_locale(
@@ -154,23 +141,25 @@ def handler(event, context_):
                 context["OPENAI_API_KEY"] = config.get("api_key")
                 context["OPENAI_MODEL"] = config.get("model")
                 context["OPENAI_TEMPERATURE"] = config.get(
-                    "temperature", OPENAI_TEMPERATURE
+                    "temperature", Config.OPENAI_TEMPERATURE
                 )
             else:
                 # The legacy data format
                 context["OPENAI_API_KEY"] = config_str
-                context["OPENAI_MODEL"] = OPENAI_MODEL
-                context["OPENAI_TEMPERATURE"] = OPENAI_TEMPERATURE
+                context["OPENAI_MODEL"] = Config.OPENAI_MODEL
+                context["OPENAI_TEMPERATURE"] = Config.OPENAI_TEMPERATURE
         except:  # noqa: E722
             context["OPENAI_API_KEY"] = None
             context["OPENAI_MODEL"] = None
             context["OPENAI_TEMPERATURE"] = None
 
-        context["OPENAI_API_TYPE"] = OPENAI_API_TYPE
-        context["OPENAI_API_BASE"] = OPENAI_API_BASE
-        context["OPENAI_API_VERSION"] = OPENAI_API_VERSION
-        context["OPENAI_DEPLOYMENT_ID"] = OPENAI_DEPLOYMENT_ID
-        context["OPENAI_FUNCTION_CALL_MODULE_NAME"] = OPENAI_FUNCTION_CALL_MODULE_NAME
+        context["OPENAI_API_TYPE"] = Config.OPENAI_API_TYPE
+        context["OPENAI_API_BASE"] = Config.OPENAI_API_BASE
+        context["OPENAI_API_VERSION"] = Config.OPENAI_API_VERSION
+        context["OPENAI_DEPLOYMENT_ID"] = Config.OPENAI_DEPLOYMENT_ID
+        context[
+            "OPENAI_FUNCTION_CALL_MODULE_NAME"
+        ] = Config.OPENAI_FUNCTION_CALL_MODULE_NAME
         next_()
 
     @app.event("app_home_opened")

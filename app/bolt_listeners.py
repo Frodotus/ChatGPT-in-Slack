@@ -4,36 +4,31 @@ import re
 import time
 
 from openai.error import Timeout
-from slack_bolt import App, Ack, BoltContext, BoltResponse
+from slack_bolt import Ack, App, BoltContext, BoltResponse
 from slack_bolt.request.payload_utils import is_event
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
-from app.env import (
-    OPENAI_TIMEOUT_SECONDS,
-    SYSTEM_TEXT,
-    TRANSLATE_MARKDOWN,
-)
+from app.config import Config
 from app.i18n import translate
 from app.openai_ops import (
-    start_receiving_openai_response,
-    format_openai_message_content,
-    consume_openai_stream_to_write_reply,
     build_system_text,
-    messages_within_context_window,
-    generate_slack_thread_summary,
-    generate_proofreading_result,
+    consume_openai_stream_to_write_reply,
+    format_openai_message_content,
     generate_chatgpt_response,
+    generate_proofreading_result,
+    generate_slack_thread_summary,
+    messages_within_context_window,
+    start_receiving_openai_response,
 )
 from app.slack_ops import (
+    build_thread_replies_as_combined_text,
+    extract_state_value,
     find_parent_message,
     is_no_mention_thread,
     post_wip_message,
     update_wip_message,
-    extract_state_value,
-    build_thread_replies_as_combined_text,
 )
-
 from app.utils import redact_string
 
 #
@@ -45,12 +40,15 @@ def just_ack(ack: Ack):
     ack()
 
 
-TIMEOUT_ERROR_MESSAGE = (
-    f":warning: Apologies! It seems that OpenAI didn't respond within the {OPENAI_TIMEOUT_SECONDS}-second timeframe. "
-    "Please try your request again later. "
-    "If you wish to extend the timeout limit, "
-    "you may consider deploying this app with customized settings on your infrastructure. :bow:"
-)
+def get_timeout_error_message():
+    return (
+        f":warning: Apologies! It seems that OpenAI didn't respond within the {Config.OPENAI_TIMEOUT_SECONDS}-second timeframe. "
+        "Please try your request again later. "
+        "If you wish to extend the timeout limit, "
+        "you may consider deploying this app with customized settings on your infrastructure. :bow:"
+    )
+
+
 DEFAULT_LOADING_TEXT = ":hourglass_flowing_sand: Wait a second, please ..."
 
 
@@ -76,7 +74,9 @@ def respond_to_app_mention(
 
     wip_reply = None
     # Replace placeholder for Slack user ID in the system prompt
-    system_text = build_system_text(SYSTEM_TEXT, TRANSLATE_MARKDOWN, context)
+    system_text = build_system_text(
+        Config.SYSTEM_TEXT, Config.TRANSLATE_MARKDOWN, context
+    )
     messages = [{"role": "system", "content": system_text}]
 
     openai_api_key = context.get("OPENAI_API_KEY")
@@ -110,7 +110,7 @@ def respond_to_app_mention(
                         "content": (
                             f"<@{reply['user']}>: "
                             + format_openai_message_content(
-                                reply_text, TRANSLATE_MARKDOWN
+                                reply_text, Config.TRANSLATE_MARKDOWN
                             )
                         ),
                     }
@@ -123,7 +123,9 @@ def respond_to_app_mention(
                 {
                     "role": "user",
                     "content": f"<@{user_id}>: "
-                    + format_openai_message_content(msg_text, TRANSLATE_MARKDOWN),
+                    + format_openai_message_content(
+                        msg_text, Config.TRANSLATE_MARKDOWN
+                    ),
                 }
             )
 
@@ -174,8 +176,8 @@ def respond_to_app_mention(
                 user_id=user_id,
                 messages=messages,
                 stream=stream,
-                timeout_seconds=OPENAI_TIMEOUT_SECONDS,
-                translate_markdown=TRANSLATE_MARKDOWN,
+                timeout_seconds=Config.OPENAI_TIMEOUT_SECONDS,
+                translate_markdown=Config.TRANSLATE_MARKDOWN,
             )
 
     except Timeout:
@@ -190,7 +192,7 @@ def respond_to_app_mention(
                 + translate(
                     openai_api_key=openai_api_key,
                     context=context,
-                    text=TIMEOUT_ERROR_MESSAGE,
+                    text=get_timeout_error_message(),
                 )
             )
             client.chat_update(
@@ -318,7 +320,7 @@ def respond_to_new_message(
             if not next(filter(lambda msg: msg["role"] == "system", messages), None):
                 # Replace placeholder for Slack user ID in the system prompt
                 system_text = build_system_text(
-                    SYSTEM_TEXT, TRANSLATE_MARKDOWN, context
+                    Config.SYSTEM_TEXT, Config.TRANSLATE_MARKDOWN, context
                 )
                 messages.insert(0, {"role": "system", "content": system_text})
 
@@ -340,7 +342,9 @@ def respond_to_new_message(
             messages.append(
                 {
                     "content": f"<@{msg_user_id}>: "
-                    + format_openai_message_content(reply_text, TRANSLATE_MARKDOWN),
+                    + format_openai_message_content(
+                        reply_text, Config.TRANSLATE_MARKDOWN
+                    ),
                     "role": (
                         "assistant" if reply["user"] == context.bot_user_id else "user"
                     ),
@@ -412,8 +416,8 @@ def respond_to_new_message(
                 user_id=user_id,
                 messages=messages,
                 stream=stream,
-                timeout_seconds=OPENAI_TIMEOUT_SECONDS,
-                translate_markdown=TRANSLATE_MARKDOWN,
+                timeout_seconds=Config.OPENAI_TIMEOUT_SECONDS,
+                translate_markdown=Config.TRANSLATE_MARKDOWN,
             )
 
     except Timeout:
@@ -428,7 +432,7 @@ def respond_to_new_message(
                 + translate(
                     openai_api_key=openai_api_key,
                     context=context,
-                    text=TIMEOUT_ERROR_MESSAGE,
+                    text=get_timeout_error_message(),
                 )
             )
             client.chat_update(
@@ -671,7 +675,7 @@ def prepare_and_share_thread_summary(
             openai_api_key=openai_api_key,
             prompt=prompt,
             thread_content=thread_content,
-            timeout_seconds=OPENAI_TIMEOUT_SECONDS,
+            timeout_seconds=Config.OPENAI_TIMEOUT_SECONDS,
         )
 
         if where_to_display == "modal":
@@ -712,7 +716,7 @@ def prepare_and_share_thread_summary(
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": TIMEOUT_ERROR_MESSAGE,
+                            "text": get_timeout_error_message(),
                         },
                     },
                 ],
@@ -832,7 +836,7 @@ def display_proofreading_result(
             logger=logger,
             openai_api_key=openai_api_key,
             original_text=original_text,
-            timeout_seconds=OPENAI_TIMEOUT_SECONDS,
+            timeout_seconds=Config.OPENAI_TIMEOUT_SECONDS,
         )
         client.views_update(
             view_id=payload["id"],
@@ -891,7 +895,7 @@ def display_proofreading_result(
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"{text}\n\n{TIMEOUT_ERROR_MESSAGE}",
+                            "text": f"{text}\n\n{get_timeout_error_message()}",
                         },
                     },
                 ],
@@ -1037,7 +1041,7 @@ def display_chat_from_scratch_result(
             logger=logger,
             openai_api_key=openai_api_key,
             prompt=prompt,
-            timeout_seconds=OPENAI_TIMEOUT_SECONDS,
+            timeout_seconds=Config.OPENAI_TIMEOUT_SECONDS,
         )
         client.views_update(
             view_id=payload["id"],
@@ -1070,7 +1074,7 @@ def display_chat_from_scratch_result(
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"{text}\n\n{TIMEOUT_ERROR_MESSAGE}",
+                            "text": f"{text}\n\n{get_timeout_error_message()}",
                         },
                     },
                 ],
