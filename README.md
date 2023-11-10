@@ -25,32 +25,49 @@ With ChatGPT, you don't need to ask a perfectly formulated question at first. Ad
 
 Doesn't that sound cool? 😎
 
-## Running the App on Your Local Machine
+## Running the App
 
-To run this app on your local machine, you only need to follow these simple steps:
+### Running Locally with Python
 
-* Create a new Slack app using the manifest-dev.yml file
-* Install the app into your Slack workspace
-* Retrieve your OpenAI API key at https://platform.openai.com/account/api-keys
-* Copy the `.env-example` file to `.env` and fill in the necessary environment variables.
-* Start the app
+To run this app on your local machine using Python:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
-```
+1. Create a new Slack app using the `manifest-dev.yml` file.
+2. Install the app into your Slack workspace.
+3. Enable Socket Mode in your Slack app. This allows the app to communicate with Slack without needing a public URL.
+4. Retrieve your OpenAI API key at https://platform.openai.com/account/api-keys.
+5. Copy the `.env-example` file to `.env` and fill in the necessary environment variables.
+6. Activate a virtual environment and install dependencies:
 
-## Running the App for Company Workspaces
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
-Confidentiality of information is top priority for businesses.
+7. Start the app:
 
-This app is open-sourced! so please feel free to fork it and deploy the app onto the infrastructure that you manage.
-After going through the above local development process, you can deploy the app using `Dockerfile`, which is placed at the root directory.
+   ```bash
+   python main.py
+   ```
 
-The `Dockerfile` is designed to establish a WebSocket connection with Slack via Socket Mode.
-This means that there's no need to provide a public URL for communication with Slack.
+### Running with Docker Compose
+
+To run the app using Docker Compose:
+
+1. Ensure Docker and Docker Compose are installed on your machine.
+2. Follow steps 1 to 5 from the Python instructions to set up your environment.
+3. Run the app:
+
+   ```bash
+   docker-compose up
+   ```
+
+This will build the Docker image and start the app according to the configuration in `docker-compose.yml` and your `.env` file.
+
+
+## Deployment for Company Workspaces
+For deploying in a company workspace, consider the security and confidentiality of information. You can fork this open-sourced app and deploy it on your managed infrastructure. The provided Dockerfile and docker-compose.yml can be used as a starting point for your deployment.
+
 
 ## Contributions
 
